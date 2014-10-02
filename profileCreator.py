@@ -1,4 +1,5 @@
-password = "******"
+##password needs to replace ******
+password = "*******"
 from xml.etree import ElementTree
 from xml.etree.ElementTree import Element
 from xml.etree.ElementTree import SubElement
@@ -6,7 +7,7 @@ import xml.etree.ElementTree as ET
 import datetime
 import os
 import urllib2
-##password needs to replace ******
+
 import os
 #for xml retreval
 from xml.dom import minidom
@@ -22,6 +23,7 @@ import time
 import urllib
 import re
 onlineXML = False
+import time
 import datetime
 curr_year = datetime.datetime.now()
 curr_year = curr_year.year  #2014
@@ -49,11 +51,11 @@ class Profiles2:
 	AC_YEAR = ""
 	def populate_admin(self, individual, username,opener):
 		#####print "inside admin"
+		count = 0
 		start = time.time()
 		ploneOnServer = False
 		container = []
 		user = []
-		count1 = 0
 		catPlusPos = ""
 		categoryArray = []
 		categoryOnly = []
@@ -62,21 +64,7 @@ class Profiles2:
 		index = 0
 		active = False
 		old_year = True
-		#onlineXML is set to False at the top of this page, and will more than likely not be used, but 
-		#I am keeping this if statement here in case we decide to use it to speed up the code
-		if onlineXML == True:
-			tree2 = ET.parse('http://webdev.cs.uwosh.edu/students/harshb98/xmlFiles/admin.xml')			
-			tree = ET.parse('/Users/cobstu01/Desktop/xmlFiles/admin.xml')
-			root = tree2.getroot()
-		#This else statement uses the "opener" passed in to open the url to the xml file, and the Element Tree package is used to get to the root of the file.
-		else:
-			url = 'https://digitalmeasures.com/login/service/v4/SchemaData/INDIVIDUAL-ACTIVITIES-Business/ADMIN'
-			opener.open(url)
-			urllib2.install_opener(opener)
-			req = urllib2.Request(url)
-			response = urllib2.urlopen(req)
-			info = response.read()
-			root = ET.fromstring(info)
+		root = get_root('ADMIN', opener)
 		#notes and RANKS are just declared variables used later on in this method. 
 		notes = ""
 		RANK = ""
@@ -85,25 +73,32 @@ class Profiles2:
 		l = 0
 		rc = 0 #record count
 		#this for loop goes iterates through the recored tags in the admin xml, and populates the nameArray with the the username in the record tag
-		for record in root.iter("{http://www.digitalmeasures.com/schema/data}Record"):
+		#for record in root.iter("{http://www.digitalmeasures.com/schema/data}Record"):
 			#record.get('username') is how you get the username attribute in the record tag. You can use this to get other attributes as well, just use the attribute name.
-			nameArray.append(record.get('username'))
+		#	nameArray.append(record.get('username'))
+		nameArray = get_users(root)
+		#This for each loop if "individual" == false go creates a profile pages for each faculty and staff that have admin data for the current school year ad is active
+		# if "individual" == true. then it updates are creates one profile.
 		for person in nameArray:
-			start = time.time()
+			#if "individual" = true, then use the username passed in as a parameter
 			if individual == True:
 				person = username
+				#if username that was passed in, is invalid exit the program
 				if person not in nameArray:
 					active = False
 					break
+			print person
+			#the index is set to the index of the username in the nameArray array. This allows access directly to that users information in the root array of the element tree
 			index = nameArray.index(person)
+			#categoryOnly array holds the users categories that they are only members of.
 			categoryOnly = []
+			#categoryArray array holds the users categories that hold a position in that category (department chair)
 			categoryArray = []
-			for admin in root[index].iter("{http://www.digitalmeasures.com/schema/data}ADMIN"):                 
-				count = len(admin.findall("{http://www.digitalmeasures.com/schema/data}ADMIN_DIR"))
-				catHolder.append(count)
-				catCount = 0
+			#This for each loop grabs each admin tag in the xml for the user, and all of their contents.
+			for admin in root[index].iter("{http://www.digitalmeasures.com/schema/data}ADMIN"):
+				#count is the number of ADMIN_DIR tags which is equivalent to the number of categories a user has.                 
+				#count = len(admin.findall("{http://www.digitalmeasures.com/schema/data}ADMIN_DIR"))
 				error = "error"
-				rightYearCount = 0
 				try:
 					RANK = str(admin.find("{http://www.digitalmeasures.com/schema/data}RANK").text).strip()
 				except AttributeError:
@@ -112,15 +107,21 @@ class Profiles2:
 					AC_YEAR = str(admin.find("{http://www.digitalmeasures.com/schema/data}AC_YEAR").text).strip()
 				except AttributeError:
 					AC_YEAR = ""
-				print "AC_YEAR "+AC_YEAR
+				
 				try:
 					EMPLOYMENT_STATUS = str(admin.find("{http://www.digitalmeasures.com/schema/data}EMPLOYMENT_STATUS").text).strip()
 				except AttributeError:
 					EMPLOYMENT_STATUS = ""
+				print "AC_YEAR "+AC_YEAR+" active status "+EMPLOYMENT_STATUS
+				#This if statement checks to see if they have admin data for the current school year, and if they are active for that school year
 				if AC_YEAR == school_year and EMPLOYMENT_STATUS == "Active":
+					print "count = "+str(count)
+					count=count+1
+
+					#active indicates if the user is for the current school year. If active is true, then their profile page gets created.
 					active = True
-#####					print count1
-					count1+=1
+					#this forloop iterates through all of the admin_dir tags which hold the categories and positions for a user. If there is a position to go with
+					#the category, they are concatenated and added to the categoryPlusPos array. If it is just the category, it is added to the categoryOnly array
 					for adminDir in admin.iter("{http://www.digitalmeasures.com/schema/data}ADMIN_DIR"): 
 					        try:
 					            CATEGORY = str(adminDir.find("{http://www.digitalmeasures.com/schema/data}CATEGORY").text).strip()
@@ -130,7 +131,6 @@ class Profiles2:
 					            POSITION = str(adminDir.find("{http://www.digitalmeasures.com/schema/data}POSITION").text).strip()
 					        except AttributeError:
 					            POSITION = "  "
-					        catCount=catCount+1
 					        if CATEGORY != "":
 					            if CATEGORY not in categoryOnly:
 					        		categoryOnly.append(CATEGORY)
@@ -149,39 +149,37 @@ class Profiles2:
 					                    categoryOnly.append(CATEGORY)
 					                if(catPlusPos not in categoryArray):
 					                    categoryArray.append(catPlusPos)
+					#this if individual == true, then you this method will return the information needed to created the profile. If it is false,
+					#it will create the profile 
 					if individual != True:
+						indStart = time.time()
 						testMethod(person, opener, RANK,categoryArray, categoryOnly)
-						l = 0
-						for o in categoryOnly:
-							l+=1
-						break
-				if individual == True:
+						indEnd = time.time()
+						print "this profile took "+str(indEnd-indStart)
+						#l = 0
+						#for o in categoryOnly:
+						#	l+=1
+				else:
 					break
+				break
+			##if individual is true, then you can break out of the forloop going through all of the user.
 			if individual == True:
 					break
+		end = time.time()
+		print "final time is "+str(end-start)
+		#Items in categoryArray, and RANK are displayed on the users profile page. categoryOnly is what the users profiles are tagged with.
 		return categoryArray, RANK, categoryOnly, active
 
 	def generatePCI(self, person, opener, Rank, categories):
-		if onlineXML == True:
-			tree = ET.parse('/Users/cobstu01/Desktop/xmlFiles/pci.xml')
-			tree2 = ET.parse('http://webdev.cs.uwosh.edu/students/harshb98/xmlFiles/pci.xml')
-			root = tree2.getroot()
-		else:
-			url = 'https://digitalmeasures.com/login/service/v4/SchemaData/INDIVIDUAL-ACTIVITIES-Business/PCI'
-			opener.open(url)
-			urllib2.install_opener(opener)
-			req = urllib2.Request(url)
-			response = urllib2.urlopen(req)
-			info = response.read()
-			root = ET.fromstring(info)
+		start = time.time()
+		root = get_root('PCI', opener)
 		summary = ""
 		notes = ""
 		nameArray = []
 		l = 0
-		rc = 0 # record count
+		rc = 0
 		index = 0
-		for record in root.iter("{http://www.digitalmeasures.com/schema/data}Record"):
-			nameArray.append(record.get('username'))
+		nameArray = get_users(root)
 		if person in nameArray:
 			index = nameArray.index(person)
 			for pci in root[index].iter("{http://www.digitalmeasures.com/schema/data}PCI"):
@@ -219,6 +217,9 @@ class Profiles2:
 					resume = "<p>Click here for <a href = https://titanfiles.uwosh.edu/groups/COBDigitalMeasures/"+resume+"> full resume</a></p>"
 				except AttributeError:
 					resume = ""
+				
+				if "None" in resume:
+					resume = ""
 				self.resume = resume
 				expCount = 0
 				otherCount = 0
@@ -231,9 +232,7 @@ class Profiles2:
 						temp = ""
 					if temp != "None" and temp != "":
 						if temp == "Other":
-							#try:
 							self.expertise +=str(pci.find("{http://www.digitalmeasures.com/schema/data}EXPERTISE_OTHER").text)+", "
-							#except
 						else:
 							self.expertise +=str(exp.find("{http://www.digitalmeasures.com/schema/data}EXPERTISE").text)+", "
 					while (expCount < len(exp)):
@@ -271,6 +270,7 @@ class Profiles2:
 				t = 0
 				for i in positions:
 					self.pci +=str(positions[t])+"<br>"
+					summary +=str(positions[t])+"<br>"
 					t = t+1
 				self.pci += "<table class = \"inner\">\n<tr>\n<td class =\"office-label\">\nOffice:</td>\n<td class =\"building\">\n"+BUILDING+"\n</td>\n</tr>\n"##
 				summary += "<table class = \"inner\">\n<tr>\n<td class =\"office-label\">\nOffice:</td>\n<td class =\"building\">\n"+BUILDING+"\n</td>\n</tr>\n" ##
@@ -291,80 +291,63 @@ class Profiles2:
 				if "None" in summary:
 					summary = self.pci.replace("None", "")
 				break
+		end = time.time()
+		print "time it took to create a PCI "+str(end-start)
 		return self.pci, summary
 
 	def generateEducation(self, person, opener):
-		if onlineXML == True:
-			tree = ET.parse('/Users/cobstu01/Desktop/xmlFiles/education.xml')
-			tree2 = ET.parse('http://webdev.cs.uwosh.edu/students/harshb98/xmlFiles/education.xml')
-			root = tree2.getroot()
-		else:
-			url = 'https://digitalmeasures.com/login/service/v4/SchemaData/INDIVIDUAL-ACTIVITIES-Business/EDUCATION'
-			opener.open(url)
-			urllib2.install_opener(opener)
-			req = urllib2.Request(url)
-			response = urllib2.urlopen(req)
-			info = response.read()
-			root = ET.fromstring(info)
+		start = time.time()
+		root = get_root('EDUCATION', opener)
 		nameArray = []
 		l = 0
 		rc = 0 # record count
 		index = 0
-		for record in root.iter("{http://www.digitalmeasures.com/schema/data}Record"):
-			nameArray.append(record.get('username'))
+		nameArray = get_users(root)
 		if person in nameArray:
 			index = nameArray.index(person)
 			i = index
 			education = ""
-			for edu in root.iter("{http://www.digitalmeasures.com/schema/data}EDUCATION"):
-				k = 1
+			#for edu in root.iter("{http://www.digitalmeasures.com/schema/data}EDUCATION"):
+			k = 1
+				#try:
+			for edu in root[i][k].iter("{http://www.digitalmeasures.com/schema/data}EDUCATION"):
 				try:
-					for edu in root[i][k].iter("{http://www.digitalmeasures.com/schema/data}EDUCATION"):
-						try:
-							highestDeg = str(edu.find("{http://www.digitalmeasures.com/schema/data}HIGHEST").text)
-						except AttributeError:
-							highestDeg = ""
-						if highestDeg == "Yes":
-							deg = str(edu.find("{http://www.digitalmeasures.com/schema/data}DEG").text)+""
-							major = str(edu.find("{http://www.digitalmeasures.com/schema/data}MAJOR").text)+". "
-							SUPPAREA = str(edu.find("{http://www.digitalmeasures.com/schema/data}SUPPAREA").text)+","
-							school = str(edu.find("{http://www.digitalmeasures.com/schema/data}SCHOOL").text)+", "
-							YR_COMP = str(edu.find("{http://www.digitalmeasures.com/schema/data}YR_COMP").text)
-							if major == "none.":
-								major = ""
-							if deg == "none":
-								deg = ""
-							if SUPPAREA == "None,":
-								SUPPAREA = ""
-							if school == "None,":
-								school = ""
-							if YR_COMP == "None,":
-								YR_COMP = ""
-							self.education = deg+" "+major+" "+SUPPAREA+" "+school+YR_COMP
-							k = k+1
-							break
-						else:
-							k = k+1
+					highestDeg = str(edu.find("{http://www.digitalmeasures.com/schema/data}HIGHEST").text)
+				except AttributeError:
+					highestDeg = ""
+				if highestDeg == "Yes":
+					deg = str(edu.find("{http://www.digitalmeasures.com/schema/data}DEG").text)+""
+					major = str(edu.find("{http://www.digitalmeasures.com/schema/data}MAJOR").text)+". "
+					SUPPAREA = str(edu.find("{http://www.digitalmeasures.com/schema/data}SUPPAREA").text)+","
+					school = str(edu.find("{http://www.digitalmeasures.com/schema/data}SCHOOL").text)+", "
+					YR_COMP = str(edu.find("{http://www.digitalmeasures.com/schema/data}YR_COMP").text)
+					if major == "none.":
+						major = ""
+					if deg == "none":
+						deg = ""
+					if SUPPAREA == "None,":
+						SUPPAREA = ""
+					if school == "None,":
+						school = ""
+					if YR_COMP == "None,":
+						YR_COMP = ""
+					self.education = deg+" "+major+" "+SUPPAREA+" "+school+YR_COMP
+					k = k+1
 					break
-				except IndexError:
-					education = "no education"
+				else:
+					k = k+1
+					#break
+				#except IndexError:
+				#	education = "no education"
 		if "None" in self.education:
 			self.education = self.education.replace("None", "")
+		end = time.time()
+		print "time it took to create a education "+str(end-start)
 		return self.education
 
 	def generateAwards(self, person, opener):
-		if onlineXML == True:
-			tree = ET.parse('/Users/cobstu01/Desktop/xmlFiles/awards.xml')
-			tree2 = ET.parse('http://webdev.cs.uwosh.edu/students/harshb98/xmlFiles/awards.xml')
-			root = tree2.getroot()
-		else:
-			url = 'https://digitalmeasures.com/login/service/v4/SchemaData/INDIVIDUAL-ACTIVITIES-Business/AWARDHONOR'
-			opener.open(url)
-			urllib2.install_opener(opener)
-			req = urllib2.Request(url)
-			response = urllib2.urlopen(req)
-			info = response.read()
-			root = ET.fromstring(info)
+		start = time.time()
+		root = get_root('AWARDHONOR', opener)
 		nominated = ""
 		text = ""
 		nameArray = []
@@ -372,8 +355,7 @@ class Profiles2:
 		awards = ""
 		i = 0
 		itemCount = 0
-		for record in root.iter("{http://www.digitalmeasures.com/schema/data}Record"):
-			nameArray.append(record.get('username'))
+		nameArray = get_users(root)
 		if person in nameArray:
 			index = nameArray.index(person)
 			i = index
@@ -436,29 +418,20 @@ class Profiles2:
 		self.awards = awards
 		if "None" in self.awards:
 			self.awards = self.awards.replace("None", "")
+		end = time.time()
+		print "time it took to create a awards "+str(end-start)
 		return self.awards
 
 	def generateCertifications(self, person, opener):
-		if onlineXML == True:
-			tree = ET.parse('/Users/cobstu01/Desktop/xmlFiles/cert.xml')
-			tree2 = ET.parse('http://webdev.cs.uwosh.edu/students/harshb98/xmlFiles/cert.xml')
-			root = tree2.getroot()
-		else:
-			url = 'https://digitalmeasures.com/login/service/v4/SchemaData/INDIVIDUAL-ACTIVITIES-Business/LICCERT'
-			opener.open(url)
-			urllib2.install_opener(opener)
-			req = urllib2.Request(url)
-			response = urllib2.urlopen(req)
-			info = response.read()
-			root = ET.fromstring(info)
+		start = time.time()
+		root = get_root('LICCERT', opener)
 		finalString = ""
 		text = ""
 		nameArray = []
 		index = 0
 		member = ""
 		itemCount = 0
-		for record in root.iter("{http://www.digitalmeasures.com/schema/data}Record"):
-			nameArray.append(record.get('username'))
+		nameArray = get_users(root)
 		if person in nameArray:
 			index = nameArray.index(person)
 			END_END =""
@@ -508,21 +481,13 @@ class Profiles2:
 		self.Certification = finalString
 		if "None" in self.Certification:
 			self.Certification = self.Certification.replace("None", "")
+		end = time.time()
+		print "time it took to create a certification "+str(end-start)
 		return self.Certification
 
 	def generateGrants(self, person, opener):
-		if onlineXML == True:
-			tree = ET.parse('/Users/cobstu01/Desktop/xmlFiles/grants.xml')
-			tree2 = ET.parse('http://webdev.cs.uwosh.edu/students/harshb98/xmlFiles/grants.xml')
-			root = tree2.getroot()
-		else:
-			url = 'https://digitalmeasures.com/login/service/v4/SchemaData/INDIVIDUAL-ACTIVITIES-Business/CONGRANT'
-			opener.open(url)
-			urllib2.install_opener(opener)
-			req = urllib2.Request(url)
-			response = urllib2.urlopen(req)
-			info = response.read()
-			root = ET.fromstring(info)
+		start = time.time()
+		root = get_root('CONGRANT', opener)
 		finalString = "<ul>\n"
 		text = ""
 		nameArray = []
@@ -530,8 +495,7 @@ class Profiles2:
 		grants = ""
 		itemCount = 0
 		published = 0
-		for record in root.iter("{http://www.digitalmeasures.com/schema/data}Record"):
-			nameArray.append(record.get('username'))
+		nameArray = get_users(root)
 		if person in nameArray:
 			index = nameArray.index(person)
 			pub_internet = ""
@@ -582,21 +546,13 @@ class Profiles2:
 	        self.grants = finalString
 	        if "None" in self.grants:
 				self.grants = self.grants.replace("None", "")
+	        end = time.time()
+	        print "time it took to create a grants "+str(end-start)
 	    	return self.grants
 
 	def generateService(self, person, opener):
-		if onlineXML == True:
-			tree = ET.parse('/Users/cobstu01/Desktop/xmlFiles/service.xml')
-			tree2 = ET.parse('http://webdev.cs.uwosh.edu/students/harshb98/xmlFiles/service.xml')
-			root = tree2.getroot()
-		else:
-			url = 'https://digitalmeasures.com/login/service/v4/SchemaData/INDIVIDUAL-ACTIVITIES-Business/GENSERVE'
-			opener.open(url)
-			urllib2.install_opener(opener)
-			req = urllib2.Request(url)
-			response = urllib2.urlopen(req)
-			info = response.read()
-			root = ET.fromstring(info)
+		start = time.time()
+		root = get_root('GENSERVE', opener)
 		finalString = ""
 		text = ""
 		nameArray = []
@@ -604,16 +560,18 @@ class Profiles2:
 		string = ""
 		itemCount = 0
 		published = -1
-		for record in root.iter("{http://www.digitalmeasures.com/schema/data}Record"):
-			nameArray.append(record.get('username'))
+		nameArray = get_users(root)
 		if person in nameArray:
 			index = nameArray.index(person)
 			pub_internet = ""
 			for service in root[index].iter("{http://www.digitalmeasures.com/schema/data}GENSERVE"):
+				tryStart = round(time.time())
 				try:
 					pub_internet = str(service.find("{http://www.digitalmeasures.com/schema/data}INTERNET").text)
 				except AttributeError:
 					pub_internet ="None"
+				tryEnd = round(time.time())
+				print "try time is "+str(tryEnd-tryStart)
 				if pub_internet != "None" and pub_internet != "No":
 					published = published+1
 					TYPE = str(service.find("{http://www.digitalmeasures.com/schema/data}TYPE").text)+": "
@@ -658,21 +616,13 @@ class Profiles2:
 		self.service = finalString
 		if "None" in self.service:
 			self.service = self.service.replace("None", "")
+		end = time.time()
+		print "time it took to create a service "+str(end-start)
 		return self.service
 
 	def generateProfessionalMembership(self, person, opener):
-		if onlineXML == True:
-			tree = ET.parse('/Users/cobstu01/Desktop/xmlFiles/pm.xml')
-			tree2 = ET.parse('http://webdev.cs.uwosh.edu/students/harshb98/xmlFiles/pm.xml')
-			root = tree2.getroot()
-		else:
-			url = 'https://digitalmeasures.com/login/service/v4/SchemaData/INDIVIDUAL-ACTIVITIES-Business/MEMBER'
-			opener.open(url)
-			urllib2.install_opener(opener)
-			req = urllib2.Request(url)
-			response = urllib2.urlopen(req)
-			info = response.read()
-			root = ET.fromstring(info)
+		start = time.time()
+		root = get_root('MEMBER', opener)
 		membership = ""
 		text = ""
 		nameArray = []
@@ -681,8 +631,7 @@ class Profiles2:
 		itemCount = 0
 		published = 0
 		condition = True
-		for record in root.iter("{http://www.digitalmeasures.com/schema/data}Record"):
-			nameArray.append(record.get('username'))
+		nameArray = get_users(root)
 		if person in nameArray:
 			index = nameArray.index(person)
 			for mem in root[index].iter("{http://www.digitalmeasures.com/schema/data}MEMBER"):
@@ -724,21 +673,13 @@ class Profiles2:
 		self.membership = membership
 		if "None" in self.membership:
 			self.membership = self.membership.replace("None", "")
+		end = time.time()
+		print "time it took to create a professional membership "+str(end-start)
 		return self.membership
 
 	def generateConference(self, person, opener):
-		if onlineXML == True:
-			tree = ET.parse('/Users/cobstu01/Desktop/xmlFiles/conf.xml')
-			tree2 = ET.parse('http://webdev.cs.uwosh.edu/students/harshb98/xmlFiles/conf.xml')
-			root = tree2.getroot()
-		else:
-			url = 'https://digitalmeasures.com/login/service/v4/SchemaData/INDIVIDUAL-ACTIVITIES-Business/PRESENT_CONFERENCE'
-			opener.open(url)
-			urllib2.install_opener(opener)
-			req = urllib2.Request(url)
-			response = urllib2.urlopen(req)
-			info = response.read()
-			root = ET.fromstring(info)
+		start = time.time()
+		root = get_root('PRESENT_CONFERENCE', opener)
 		text = ""
 		nameArray = []
 		index = 0
@@ -747,8 +688,8 @@ class Profiles2:
 		itemCount = 0
 		published = 0
 		condition = True
-		for record in root.iter("{http://www.digitalmeasures.com/schema/data}Record"):
-			nameArray.append(record.get('username'))
+		TITLE = ""
+		nameArray = get_users(root)
 		if person in nameArray:
 			index = nameArray.index(person)
 			pub_internet = ""
@@ -790,7 +731,10 @@ class Profiles2:
 					except AttributeError:
 						DTY_PRESENT ="None"
 					try:
-						TITLE = ' '+str(conference.find("{http://www.digitalmeasures.com/schema/data}TITLE").text)+"."
+						try:
+							TITLE = ' '+str(conference.find("{http://www.digitalmeasures.com/schema/data}TITLE").text)+"."
+						except UnicodeEncodeError:
+							NAME = NAME.encode('ascii', 'ignore')
 					except AttributeError:
 						TITLE ="None"
 					FNAME = ""
@@ -856,21 +800,13 @@ class Profiles2:
 		self.conferences = conferenceString
 		if "None" in self.conferences:
 			self.conferences = self.conferences.replace("None", "")
+		end = time.time()
+		print "time it took to create a conference "+str(end-start)
 		return self.conferences
 
 	def generateProf(self, person, opener):
-		if onlineXML == True:
-			tree = ET.parse('/Users/cobstu01/Desktop/xmlFiles/prof.xml')
-			tree2 = ET.parse('http://webdev.cs.uwosh.edu/students/harshb98/xmlFiles/prof.xml')
-			root = tree2.getroot()
-		else:
-			url = 'https://digitalmeasures.com/login/service/v4/SchemaData/INDIVIDUAL-ACTIVITIES-Business/PRESENT_PROFESSIONAL'
-			opener.open(url)
-			urllib2.install_opener(opener)
-			req = urllib2.Request(url)
-			response = urllib2.urlopen(req)
-			info = response.read()
-			root = ET.fromstring(info)
+		start = time.time()
+		root = get_root('PRESENT_PROFESSIONAL', opener)
 		text = ""
 		nameArray = []
 		index = 0
@@ -880,8 +816,7 @@ class Profiles2:
 		itemCount = 0
 		published = 0
 		condition = True
-		for record in root.iter("{http://www.digitalmeasures.com/schema/data}Record"):
-			nameArray.append(record.get('username'))
+		nameArray = get_users(root)
 		if person in nameArray:
 			index = nameArray.index(person)
 			pub_internet = ""
@@ -976,22 +911,14 @@ class Profiles2:
 		        presentationString = ""
 	        if "None" in self.presentations:
 				self.presentations = self.presentations.replace("None", "")
+	        end = time.time()
+	        print "time it took to create a professional presentation "+str(end-start)
         	return self.presentations
 
 	def generatePub(self, person, opener):
-	    if onlineXML == True:
-			tree = ET.parse('/Users/cobstu01/Desktop/xmlFiles/pub.xml')
-			tree2 = ET.parse('http://webdev.cs.uwosh.edu/students/harshb98/xmlFiles/pub.xml')
-			root = tree2.getroot()
-	    else:
-		    url = 'https://digitalmeasures.com/login/service/v4/SchemaData/INDIVIDUAL-ACTIVITIES-Business/INTELLCONT'
-		    opener.open(url)
-		    urllib2.install_opener(opener)
-		    req = urllib2.Request(url)
-		    response = urllib2.urlopen(req)
-		    info = response.read()
-		    root = ET.fromstring(info)
-	    import time
+	    start = time.time()
+	    root = get_root('INTELLCONT', opener)
+	    
 	    j = 0
 	    pub = []
 	    linkString = ""
@@ -1043,11 +970,12 @@ class Profiles2:
 	    hasPublication = False
 	    stringList = ""
 	    ploneOnServer = False
-	    totalTimeStart = time.time()
-	    for record in root.iter("{http://www.digitalmeasures.com/schema/data}Record"):
-			nameArray.append(record.get('username'))
+	    forloopStart = time.time()
+	    nameArray = get_users(root)
 	    if person in nameArray:
 			index = nameArray.index(person)
+			forloopEnd = time.time()
+			print "foorloop took "+str(forloopEnd-forloopStart)
 			pub_internet = ""
 			for publication in root[index].iter("{http://www.digitalmeasures.com/schema/data}INTELLCONT"):
 				try:
@@ -1556,6 +1484,8 @@ class Profiles2:
 	    self.publications = stringList
 	    if "None" in self.publications:
 			self.publications = self.publications.replace("None", "")
+	    end = time.time()
+	    print "time it took to create a publications "+str(end-start)
 	    return self.publications
 
 def testMethod(username, opener, rank, categories, catOnly):
@@ -1564,66 +1494,74 @@ def testMethod(username, opener, rank, categories, catOnly):
 	pciArray = []
 	portal = getSite()
 	form_folder = getattr(portal,'directory')
-	#####form_folder = getattr(portal,'testdir')
-	#####inner_folder = getattr(form_folder,'directory1')
-	#####print username
-	#####if hasattr(inner_folder,username) == False:
 	if hasattr(form_folder,username) == False:
 		p = Profiles2()
+		#start = time.time()
 		pciArray = p.generatePCI(username, opener, rank, categories)
 		bio = pciArray[0]
 		summary = pciArray[1]
+		#end = time.time()
+		#print "time it took to create a PCI "+str(end-start)
+		#start = time.time()
 		temp = p.generateEducation(username, opener)
 		summary = temp+summary
+		#end = time.time()
+		#print "time it took to create a Education "+str(end-start)
+		#start = time.time()
 		directory +=p.generatePub(username, opener)
+		#end = time.time()
+		#print "time it took to create a publication "+str(end-start)
+		#start = time.time()
 		directory +=p.generateConference(username, opener)
+		#end = time.time()
+		#print "time it took to create a conference "+str(end-start)
+		#start = time.time()
 		directory +=p.generateGrants(username, opener)
+		#end = time.time()
+		#print "time it took to create a grants "+str(end-start)
+		#start = time.time()
 		directory +=p.generateProf(username, opener)
+		#end = time.time()
+		#print "time it took to create a professional presentation "+str(end-start)
+		#start = time.time()
 		directory += p.generateAwards(username, opener)
+		#end = time.time()
+		#print "time it took to create a awards "+str(end-start)
+		#start = time.time()
 		directory +=p.generateProfessionalMembership(username, opener)
+		#end = time.time()
+		#print "time it took to create a professional membership "+str(end-start)
+		#start = time.time()
 		directory +=p.generateCertifications(username, opener)
+		#end = time.time()
+		#print "time it took to create a certifications "+str(end-start)
+		#start = time.time()
 		directory +=p.generateService(username, opener)
+		#end = time.time()
+		#print "time it took to create a service "+str(end-start)
 		if len(directory) > 0:
 			directory ="<h1>Selected Publications and Accomplishments</h1>"+directory
 		directory = temp+bio+directory
 		directory+=p.resume
+		#start = time.time()
 		create_plone_ProfilePage(p.fullname, username, directory, summary, catOnly, False)
-
-def delObject(username):
-    portal = getSite()
-    #####folder = portal['testdir']
-    #####del_item_folder = folder['directory1']
-    folder = portal['directory']
-    #####del_item_folder.manage_delObjects([username])
-    folder.manage_delObjects([username])
-    #####folder = portal['testdir']
-    folder = portal['summary']
-    #####del_item_folder = folder['summary1']
-    #####del_item_folder.manage_delObjects([username+'-summary'])
-    folder.manage_delObjects([username+'-summary'])
-
-def update_profile(username = ""):
+		#end = time.time()
+		#print "time it took to create a profile "+str(end-start)
+def update_profile(newPage, username = ""):
+	profileStart = time.time()
+	exist = False
 	newTab = False
 	portal = getSite()
 	summary = ""
 	directory = ""
-	#####if hasattr(portal, "testdir"):
 	if hasattr(portal, "directory"):
 		portal2 = getattr(portal,"directory")
-		#####portal2 = getattr(portal,"testdir")
-		#####if hasattr(portal2, 'directory1'):
-			#####form_folder = getattr(portal2, 'directory1')
 		if username == "":
-			newTab = True
+			#newTab = True
 			username = portal2.portal_membership.getAuthenticatedMember().id
-			#####username = form_folder.portal_membership.getAuthenticatedMember().id
 		url = "http://www.uwosh.edu/cob/directory/"+username
-		#####url = "http://www.uwosh.edu/cob/testdir/directory1/"+username
-		#url = "http://localhost:8080/Plone/testdir/directory1/"+username
-		#####print "username === "+username
 		if username != "admin" and username != "acl_users":
 			adminInfo = []
-			#####start = time.time()
 			opener = login()
 			p = Profiles2()
 			adminInfo = p.populate_admin(True,username, opener)
@@ -1632,14 +1570,14 @@ def update_profile(username = ""):
 			catOnly = adminInfo[2]
 			isActive = adminInfo[3]
 			if isActive == True:
+				exist = True
 				pciArray = p.generatePCI(username, opener, rank, categories)
 				bio = pciArray[0]
-				summary = "<a class =\"summaryName\" href=\"http://www.uwosh.edu/cob/directory/"+username+"\">"+p.fullname+"</a>\n<br>"
+				summary = "<br><a class =\"summaryName\" href=\"http://www.uwosh.edu/cob/directory/"+username+"\">"+p.fullname+"</a>\n<br>"
 				temp = p.generateEducation(username, opener)
+				print temp
 				summary+=temp
 				summary += pciArray[1]
-				#temp = p.generateEducation(username, opener)
-				#summary = temp+summary
 				directory +=p.generatePub(username, opener)
 				directory +=p.generateConference(username, opener)
 				directory +=p.generateGrants(username, opener)
@@ -1654,100 +1592,31 @@ def update_profile(username = ""):
 				directory+=p.resume
 				#####f = open('/Users/cobstu01/Desktop/iversen.html', 'w')
 				#####f.write(directory)
-				create_plone_ProfilePage(p.fullname,username, directory, summary, catOnly, True,)
-			end = time.time()
-			#####print "time is "+str(end-start)
-			if newTab == True:
-				new_tab(url)
-			#####start = time.time()
-			#####end = time.time()
+	
+				if newPage == True:
+					create_plone_ProfilePage(p.fullname,username, directory, summary, catOnly, True,)
+					profileEnd = time.time()
+					print "profile page created in "+str(profileEnd-profileStart)
+				else:
+					get_categories(username, p.fullname, catOnly)
+					profileEnd = time.time()
+					print "profile page created in "+str(profileEnd-profileStart)
+					return directory, summary, exist
+	
 
-def admin_update(username):
-	exist = True
-	returnInfo = []
-	import webbrowser
-	var = 2
-	portal = getSite()
-	summary = ""
-	directory = ""
-	#####if hasattr(portal, "testdir"):
-		#####portal2 = getattr(portal,"testdir")
-	if hasattr(portal, "directory"):
-		portal2 = getattr(portal,"directory")
-		#####if hasattr(portal2, 'directory1'):
-			#####form_folder = getattr(portal2, 'directory1')
-		url = "http://www.uwosh.edu/cob/directory/"+username
-		#####url = "http://www.uwosh.edu/cob/testdir/directory1/"+username
-		#url = "http://localhost:8080/Plone/testdir/directory1/"+username
-		#####print "username === "+username
-		if username != "admin" and username != "acl_users":
-			adminInfo = []
-			#####start = time.time()
-			opener = login()
-			p = Profiles2()
-			adminInfo = p.populate_admin(True,username, opener)
-			categories = adminInfo[0]
-			rank = adminInfo[1]
-			catOnly = adminInfo[2]
-			isActive = adminInfo[3]
-			if isActive == True:
-				pciArray = p.generatePCI(username, opener, rank, categories)
-				bio = pciArray[0]
-				summary = "<a class =\"summaryName\" href=\"http://www.uwosh.edu/cob/directory/"+username+"\">"+p.fullname+"</a>\n<br>"
-				temp = p.generateEducation(username, opener)
-				summary+=temp
-				summary+= pciArray[1]
-				directory +=p.generatePub(username, opener)
-				directory +=p.generateConference(username, opener)
-				directory +=p.generateGrants(username, opener)
-				directory +=p.generateProf(username, opener)
-				directory += p.generateAwards(username, opener)
-				directory +=p.generateProfessionalMembership(username, opener)
-				directory +=p.generateCertifications(username, opener)
-				directory +=p.generateService(username, opener)
-				if len(directory) > 0:
-					directory ="<h1>Selected Publications and Accomplishments</h1>"+directory
-				directory = temp+bio+directory
-				directory+=p.resume
-				get_categories(username, p.fullname, catOnly)
-			else:
-				exist = False
-			#####end = time.time()
-			#####print str(end-start)
-			#####start = time.time()
-			#####end = time.time()
-	return directory, summary, exist
-
-def new_tab(url):
-	import webbrowser
-	from time import sleep
-	webbrowser.open_new_tab(url)
-
+#Creates the opener which is used to login to web services. By returning opener, you only have to call this method once as long as you keep track of the return value
 def login():
-    #####start = time.time()
     password_mgr = urllib2.HTTPPasswordMgrWithDefaultRealm()
     username = "uwosh/fac_reports"
     top_level_url = "http://digitalmeasures.com/login/service/v4/SchemaData/INDIVIDUAL-ACTIVITIES-Business"
     password_mgr.add_password(None, top_level_url, username, password)
     handler = urllib2.HTTPBasicAuthHandler(password_mgr)
     opener = urllib2.build_opener(handler)
-    #####end = time.time()
     return opener
 
+##get_categories updates or adds the departments for a faculty or staff that they should be tagged in.
 def get_categories(username, name, categories):
     portal = getSite()
-    #####if hasattr(portal, "testdir"):
-    	#####portal2 = getattr(portal, "testdir")
-    	#####if hasattr(portal2, "directory1"):
-	        #####form_folder = getattr(portal2, "directory1")
-	        #####if hasattr(form_folder, username):
-	            #####person = getattr(form_folder,username)
-	            #####person.edit(subject=categories)
-    	#####if hasattr(portal2, "summary1"):
-		    #####form_folder = getattr(portal2, "summary1")
-		    #####if hasattr(form_folder, username+"-summary"):
-		        #####person = getattr(form_folder,username+"-summary")
-		        #####person.edit(subject=categories)
     if hasattr(portal, "directory"):
 		portal2 = getattr(portal, "directory")
     		if hasattr(portal2, username):
@@ -1762,12 +1631,10 @@ def get_categories(username, name, categories):
 ##@param linkString
 ##A concatenated string
 ##This method is used to make sure that a string ends with a period. 
-##It's not as simple as just checking the last character, because it could be in an order like (,.) or (..) or (.,)
+##It's not as simple as just checking the last character, because it could be in an order like (,.) or (..) or (.,)...
 def fixPuncuation(linkString):
     if(linkString[-1].isalpha() == True or linkString[-1].isdigit() == True or linkString[-1] == ")"):
             linkString = linkString+"."
-            #####print "linkstring is ?"+linkString[-1]
-#            return linkString
     elif linkString[-1] != "." or linkString[-1] != ")" or linkString[-1] != " " or linkString[-1] != ">":
         linkString = linkString.strip(linkString[-1])
         linkString = fixPuncuation(linkString)
@@ -1784,7 +1651,6 @@ def fixPuncuation(linkString):
 #@param info
 #HTML to be added to the profile page for a user.
 def create_plone_ProfilePage(name, username, info, summary, categories, update):
-	import glob
 	i = 0
 	j = 0
 	portal = getSite()
@@ -1796,12 +1662,6 @@ def create_plone_ProfilePage(name, username, info, summary, categories, update):
 	    tempName = name
 	tempName = tempName[:-5]
 	username = username.lower()
-	#####if hasattr(portal, "testdir"):
-		#####portal2 = getattr(portal,"testdir")
-		#####if hasattr(portal2, 'directory1'):
-			#####form_folder = getattr(portal2, 'directory1')
-			#####if hasattr(form_folder, username) == False:
-
 	if hasattr(portal, "directory"):
 		form_folder = getattr(portal,"directory")
 		if hasattr(form_folder, username) == False:
@@ -1836,7 +1696,25 @@ def create_plone_ProfilePage(name, username, info, summary, categories, update):
 					newPage.setExcludeFromNav(True)
 					newPage.edit(subject=categories)
 					newPage.edit('html',summary)
+def get_root(rootType, opener):
+	url = 'https://digitalmeasures.com/login/service/v4/SchemaData/INDIVIDUAL-ACTIVITIES-Business/'+rootType
+	opener.open(url)
+	urllib2.install_opener(opener)
+	req = urllib2.Request(url)
+	response = urllib2.urlopen(req)
+	info = response.read()
+	root = ET.fromstring(info)
+	return root
+
+def get_users(root):
+	nameArray = []
+	for record in root.iter("{http://www.digitalmeasures.com/schema/data}Record"):
+			nameArray.append(record.get('username'))
+	return nameArray
+
 def test():
 	opener = login()
 	p = Profiles2()
 	p.populate_admin(False, "", opener)
+def printText(text = ""):
+	print text
